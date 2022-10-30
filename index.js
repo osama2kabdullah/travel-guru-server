@@ -61,9 +61,16 @@ async function run() {
         const options = { upsert: true };
         result = await users.updateOne(query, update, options);
       }
-      const token = jwt.sign(query, process.env.JSON_TOKEN, { expiresIn: '1h' });
+      const token = jwt.sign(query, process.env.JSON_TOKEN, { expiresIn: '1d' });
       res.send({ token, result });
     });
+    
+    //get a place
+    app.post('/getplace', verifyToken, async (req, res)=>{
+      const filter = req.body;
+      const result = await places.findOne({name: filter.toPlace});
+      res.send({...result});
+    })
 
     //insert a bookings
     app.post("/makebooking", verifyToken, async (req, res) => {
@@ -80,6 +87,13 @@ async function run() {
       const result = await users.updateOne(filter, update, options);
       res.send({result});
     });
+    
+    //get users booking
+    app.get('/userbookings', verifyToken, async (req, res)=>{
+      const filter = {email: req.decoded.email};
+      const result = await users.findOne(filter);
+      res.send(result.bookings || false);
+    })
     
     
   } finally {
