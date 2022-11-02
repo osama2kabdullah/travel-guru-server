@@ -42,13 +42,14 @@ async function run() {
     client.connect();
     const places = client.db("travel-guru").collection("places");
     const users = client.db("travel-guru").collection("users");
-    const bookings = client.db("travel-guru").collection("bookings");
+    const hotels = client.db("travel-guru").collection("hotels");
 
     //get placces
     app.get("/palces", async (req, res) => {
       const result = await places.find().toArray();
       res.send(result);
     });
+    
 
     //post a user
     app.put("/insertUser", async (req, res) => {
@@ -94,7 +95,9 @@ async function run() {
             return res.send({success: true, message:'hav not any bookings'});
           } else {
             
-            res.send({success: true, message:'you are right place'})
+            const hotel = await hotels.find().toArray();
+            
+            res.send({success: true, message:'you are right place', hotel})
             
           }
         } else {
