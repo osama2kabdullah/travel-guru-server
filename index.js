@@ -94,11 +94,8 @@ async function run() {
           if (match.length < 0) {
             return res.send({success: true, message:'hav not any bookings'});
           } else {
-            
-            const hotel = await hotels.find().toArray();
-            
-            res.send({success: true, message:'you are right place', hotel})
-            
+            const hotelse = await places.findOne({name: placename});
+            res.send({success: true, message:'you are right place', hotelse})
           }
         } else {
           return res.send({success: true, message:'hav not any bookings'});
