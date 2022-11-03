@@ -156,6 +156,44 @@ async function run() {
         }
       }
     );
+    
+    //validate user for hotel booking
+    app.get('/usersforbookhotel/:placeName/:email', verifyToken, async (req, res)=>{
+      const { placeName, email } = req.params;
+        if (email !== req.decoded.email){
+          return res.status(401).send({
+            message: "Unauthorize access, invalid user",
+            success: false,
+            code: 401,
+          });
+        }else {
+          const user = await users.findOne({ email: req.decoded.email });
+          if (user.bookings){
+            let have;
+            user.bookings.forEach(async (booking) => {
+              if (booking.toPlace == placeName){
+                have = true;
+              }
+            })
+            if(have){
+              return res.send({valid: true})
+            }else {
+              return res.status(403).send({
+                message: "Forbidden access, you have no bookings",
+                success: false,
+                code: 403,
+              });
+            }
+            
+          }else {
+            return res.status(403).send({
+              message: "Forbidden access, you have no bookings",
+              success: false,
+              code: 403,
+            });
+          }
+        }
+    })
 
     //insert a bookings
     app.post("/makebooking", verifyToken, async (req, res) => {
@@ -177,7 +215,11 @@ async function run() {
     app.get("/userbookings", verifyToken, async (req, res) => {
       const filter = { email: req.decoded.email };
       const result = await users.findOne(filter);
-      res.send(result.bookings || false);
+      res.send(result.bookings || {
+        message: "Forbidden access, you have no bookings",
+        success: false,
+        code: 403,
+      });
     });
   } finally {
     //client.close();
