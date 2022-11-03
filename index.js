@@ -49,7 +49,6 @@ async function run() {
       const result = await places.find().toArray();
       res.send(result);
     });
-    
 
     //post a user
     app.put("/insertUser", async (req, res) => {
@@ -92,13 +91,17 @@ async function run() {
             (book) => book.toPlace == placename
           );
           if (match.length < 0) {
-            return res.send({success: true, message:'hav not any bookings'});
+            return res.send({ success: true, message: "hav not any bookings" });
           } else {
-            const hotelse = await places.findOne({name: placename});
-            res.send({success: true, message:'you are right place', hotelse})
+            const hotelse = await places.findOne({ name: placename });
+            res.send({
+              success: true,
+              message: "you are right place",
+              hotelse,
+            });
           }
         } else {
-          return res.send({success: true, message:'hav not any bookings'});
+          return res.send({ success: true, message: "hav not any bookings" });
         }
       } else {
         return res
@@ -106,6 +109,53 @@ async function run() {
           .send({ message: "Forbidden access", success: false, code: 403 });
       }
     });
+
+    //book hotel
+    app.post(
+      "/bookhotel/:placeName/:hotelName/:userEmail",
+      verifyToken,
+      async (req, res) => {
+        const { placeName, hotelName, userEmail } = req.params;
+        if (userEmail !== req.decoded.email) {
+          return res.status(401).send({
+            message: "Unauthorize access, invalid user",
+            success: false,
+            code: 401,
+          });
+        }
+        const user = await users.findOne({ email: req.decoded.email });
+        if (user.bookings) {
+          user.bookings.forEach(async (booking) => {
+            if (booking.toPlace == placeName) {
+              const doc = {...req.body, hotelName}
+              booking["hotel"] = doc;
+              const update = { $set: { bookings: user.bookings } };
+              const options = { upsert: true };
+              const result = await users.updateOne(
+                { email: req.decoded.email },
+                update,
+                options
+              );
+              return res.send({ result });
+            }
+          });
+          // return res
+          //   .status(403)
+          //   .send({
+          //     message:
+          //       "Forbidden access, you  have no trip in this " + placeName,
+          //     success: false,
+          //     code: 403,
+          //   });
+        } else {
+          return res.status(403).send({
+            message: "Forbidden access, you have no bookings",
+            success: false,
+            code: 403,
+          });
+        }
+      }
+    );
 
     //insert a bookings
     app.post("/makebooking", verifyToken, async (req, res) => {
