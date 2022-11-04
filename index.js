@@ -20,12 +20,12 @@ const client = new MongoClient(uri, {
 //verifyToken
 const verifyToken = (req, res, next) => {
   const token = req.headers.authorization;
-  if (token.split(" ")[1] === "null") {
+  if (token?.split(" ")[1] === "null") {
     return res
       .status(401)
       .send({ message: "Unauthorize access", success: false, code: 401 });
   }
-  const tokenCode = token.split(" ")[1].replace('"', "").replace('"', "");
+  const tokenCode = token?.split(" ")[1]?.replace('"', "")?.replace('"', "");
   jwt.verify(tokenCode, process.env.JSON_TOKEN, (err, decoded) => {
     if (err) {
       return res
@@ -79,6 +79,15 @@ async function run() {
         ? res.send({ valid: true })
         : res.send({ valid: false });
     });
+    
+    
+    //get single hotel details
+    app.get('/hotel/:hotelName/:placeName', verifyToken,  async (req, res)=>{
+      const {hotelName, placeName} = req.params;
+      const hotel = await places.findOne({name: placeName})
+      const match = hotel.hotels.find(hotel=>hotel.name===hotelName);
+      res.send({cost: match.cost});
+    })
 
     //get hotels
     app.get("/hotels/:placeName", verifyToken, async (req, res) => {
@@ -176,6 +185,9 @@ async function run() {
               }
             })
             if(have){
+              
+              // const placeDetail = await
+              
               return res.send({valid: true})
             }else {
               return res.status(403).send({
