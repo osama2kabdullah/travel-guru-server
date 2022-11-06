@@ -79,15 +79,14 @@ async function run() {
         ? res.send({ valid: true })
         : res.send({ valid: false });
     });
-    
-    
+
     //get single hotel details
-    app.get('/hotel/:hotelName/:placeName', verifyToken,  async (req, res)=>{
-      const {hotelName, placeName} = req.params;
-      const hotel = await places.findOne({name: placeName})
-      const match = hotel.hotels.find(hotel=>hotel.name===hotelName);
-      res.send({cost: match.cost});
-    })
+    app.get("/hotel/:hotelName/:placeName", verifyToken, async (req, res) => {
+      const { hotelName, placeName } = req.params;
+      const hotel = await places.findOne({ name: placeName });
+      const match = hotel.hotels.find((hotel) => hotel.name === hotelName);
+      res.send({ cost: match.cost });
+    });
 
     //get hotels
     app.get("/hotels/:placeName", verifyToken, async (req, res) => {
@@ -136,16 +135,27 @@ async function run() {
         if (user.bookings) {
           user.bookings.forEach(async (booking) => {
             if (booking.toPlace == placeName) {
-              const doc = {...req.body, hotelName}
-              booking["hotel"] = doc;
-              const update = { $set: { bookings: user.bookings } };
-              const options = { upsert: true };
-              const result = await users.updateOne(
-                { email: req.decoded.email },
-                update,
-                options
-              );
-              return res.send({ result });
+              const hotel = await places
+                .find({ name: placeName })
+                .project({ hotels: 1, _id: 0 })
+                .toArray();
+
+              hotel[0].hotels.forEach(async (element) => {
+                if (element.name == hotelName) {
+                  const TotalDayCost = parseFloat(element.cost.split("$")[1]) * parseInt(req.body.days);
+                  const doc = { ...req.body, hotelName, Hotelcost: TotalDayCost };
+                  
+                  booking["hotel"] = doc;
+                  const update = { $set: { bookings: user.bookings } };
+                  const options = { upsert: true };
+                  const result = await users.updateOne(
+                    { email: req.decoded.email },
+                    update,
+                    options
+                  );
+                  return res.send({ result });
+                }
+              });
             }
           });
           // return res
@@ -165,39 +175,40 @@ async function run() {
         }
       }
     );
-    
+
     //validate user for hotel booking
-    app.get('/usersforbookhotel/:placeName/:email', verifyToken, async (req, res)=>{
-      const { placeName, email } = req.params;
-        if (email !== req.decoded.email){
+    app.get(
+      "/usersforbookhotel/:placeName/:email",
+      verifyToken,
+      async (req, res) => {
+        const { placeName, email } = req.params;
+        if (email !== req.decoded.email) {
           return res.status(401).send({
             message: "Unauthorize access, invalid user",
             success: false,
             code: 401,
           });
-        }else {
+        } else {
           const user = await users.findOne({ email: req.decoded.email });
-          if (user.bookings){
+          if (user.bookings) {
             let have;
             user.bookings.forEach(async (booking) => {
-              if (booking.toPlace == placeName){
+              if (booking.toPlace == placeName) {
                 have = true;
               }
-            })
-            if(have){
-              
+            });
+            if (have) {
               // const placeDetail = await
-              
-              return res.send({valid: true})
-            }else {
+
+              return res.send({ valid: true });
+            } else {
               return res.status(403).send({
                 message: "Forbidden access, you have no bookings",
                 success: false,
                 code: 403,
               });
             }
-            
-          }else {
+          } else {
             return res.status(403).send({
               message: "Forbidden access, you have no bookings",
               success: false,
@@ -205,7 +216,8 @@ async function run() {
             });
           }
         }
-    })
+      }
+    );
 
     //insert a bookings
     app.post("/makebooking", verifyToken, async (req, res) => {
@@ -227,11 +239,13 @@ async function run() {
     app.get("/userbookings", verifyToken, async (req, res) => {
       const filter = { email: req.decoded.email };
       const result = await users.findOne(filter);
-      res.send(result.bookings || {
-        message: "Forbidden access, you have no bookings",
-        success: false,
-        code: 403,
-      });
+      res.send(
+        result.bookings || {
+          message: "Forbidden access, you have no bookings",
+          success: false,
+          code: 403,
+        }
+      );
     });
   } finally {
     //client.close();
