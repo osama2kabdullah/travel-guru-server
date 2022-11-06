@@ -3,6 +3,7 @@ const cors = require("cors");
 require("dotenv").config();
 const { MongoClient, ServerApiVersion } = require("mongodb");
 const jwt = require("jsonwebtoken");
+const stripe = require('stripe')(process.env.STRIPE_KEY);
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -50,6 +51,42 @@ async function run() {
       res.send(result);
     });
 
+    //payment intent
+    app.post('/paymentIntent', verifyToken, async (req, res)=>{
+      const {cost} = req.body;
+      const amount = cost * 100;
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount, currency:'usd', payment_method_types:['card']
+      })
+      res.send({clientSecret: paymentIntent.client_secret});
+    });
+    
+    //update for pay
+    app.put('/updateforpay/:email/:placeName', verifyToken, async (req, res)=>{
+      const {placename, email} = req.params;
+      if(req.decoded.email === email){
+        const user = await users.findOne({ email });
+        if (user.bookings) {
+          const match = user.bookings.filter(
+            (book) => book.toPlace === placename
+          );
+          if (match.length < 0) {
+            res.send({ success: false, message: "hav not that booking" })
+          }else {
+            
+            console.log(req.body, match);
+            
+          }
+        }else {
+          res.send({ success: false, message: "hav not any bookings" })
+        }
+      }else {
+        return res
+      .status(401)
+      .send({ message: "Unauthorize access", success: false, code: 401 });
+      }
+    })
+    
     //post a user
     app.put("/insertUser", async (req, res) => {
       const query = { email: req.body.email };
@@ -99,7 +136,7 @@ async function run() {
             (book) => book.toPlace == placename
           );
           if (match.length < 0) {
-            return res.send({ success: true, message: "hav not any bookings" });
+            return res.send({ success: false, message: "hav not any bookings" });
           } else {
             const hotelse = await places.findOne({ name: placename });
             res.send({
