@@ -171,7 +171,11 @@ async function run() {
         const user = await users.findOne({ email: req.decoded.email });
         if (user.bookings) {
           user.bookings.forEach(async (booking) => {
+            
+            //error found
+            
             if (booking.toPlace == placeName) {
+              console.log(booking);
               const hotel = await places
                 .find({ name: placeName })
                 .project({ hotels: 1, _id: 0 })
@@ -185,12 +189,12 @@ async function run() {
                   booking["hotel"] = doc;
                   const update = { $set: { bookings: user.bookings } };
                   const options = { upsert: true };
-                  const result = await users.updateOne(
-                    { email: req.decoded.email },
-                    update,
-                    options
-                  );
-                  return res.send({ result });
+                  // const result = await users.updateOne(
+                  //   { email: req.decoded.email },
+                  //   update,
+                  //   options
+                  // );
+                  // return res.send({ result });
                 }
               });
             }
@@ -272,7 +276,7 @@ async function run() {
       res.send({ result });
     });
 
-    //get users booking
+    //get users bookings
     app.get("/userbookings", verifyToken, async (req, res) => {
       const filter = { email: req.decoded.email };
       const result = await users.findOne(filter);
