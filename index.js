@@ -3,7 +3,7 @@ const cors = require("cors");
 require("dotenv").config();
 const { MongoClient, ServerApiVersion } = require("mongodb");
 const jwt = require("jsonwebtoken");
-const stripe = require('stripe')(process.env.STRIPE_KEY);
+const stripe = require("stripe")(process.env.STRIPE_KEY);
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -43,7 +43,7 @@ async function run() {
     client.connect();
     const places = client.db("travel-guru").collection("places");
     const users = client.db("travel-guru").collection("users");
-    const hotels = client.db("travel-guru").collection("hotels");
+    const bookings = client.db("travel-guru").collection("bookings");
 
     //get placces
     app.get("/palces", async (req, res) => {
@@ -51,42 +51,56 @@ async function run() {
       res.send(result);
     });
 
+    //validate admin
+    app.get("/admin/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      if (req.decoded.email === email) {
+        const user = await users.findOne({ email });
+
+        res.send(user?.roll === "admin" ? { admin: true } : { admin: false });
+      }
+    });
+
     //payment intent
-    app.post('/paymentIntent', verifyToken, async (req, res)=>{
-      const {cost} = req.body;
+    app.post("/paymentIntent", verifyToken, async (req, res) => {
+      const { cost } = req.body;
       const amount = cost * 100;
       const paymentIntent = await stripe.paymentIntents.create({
-        amount, currency:'usd', payment_method_types:['card']
-      })
-      res.send({clientSecret: paymentIntent.client_secret});
+        amount,
+        currency: "usd",
+        payment_method_types: ["card"],
+      });
+      res.send({ clientSecret: paymentIntent.client_secret });
     });
-    
-    //update for pay
-    app.put('/updateforpay/:email/:placeName', verifyToken, async (req, res)=>{
-      const {placename, email} = req.params;
-      if(req.decoded.email === email){
-        const user = await users.findOne({ email });
-        if (user.bookings) {
-          const match = user.bookings.filter(
-            (book) => book.toPlace === placename
-          );
-          if (match.length < 0) {
-            res.send({ success: false, message: "hav not that booking" })
-          }else {
-            
-            console.log(req.body, match);
-            
+
+    //update users data after pay
+    app.put(
+      "/updateforpay/:email/:placeName",
+      verifyToken,
+      async (req, res) => {
+        const { placename, email } = req.params;
+        if (req.decoded.email === email) {
+          const user = await users.findOne({ email });
+          if (user.bookings) {
+            const match = user.bookings.filter(
+              (book) => book.toPlace === placename
+            );
+            if (match.length < 0) {
+              res.send({ success: false, message: "hav not that booking" });
+            } else {
+              console.log(req.body, match);
+            }
+          } else {
+            res.send({ success: false, message: "hav not any bookings" });
           }
-        }else {
-          res.send({ success: false, message: "hav not any bookings" })
+        } else {
+          return res
+            .status(401)
+            .send({ message: "Unauthorize access", success: false, code: 401 });
         }
-      }else {
-        return res
-      .status(401)
-      .send({ message: "Unauthorize access", success: false, code: 401 });
       }
-    })
-    
+    );
+
     //post a user
     app.put("/insertUser", async (req, res) => {
       const query = { email: req.body.email };
@@ -104,10 +118,10 @@ async function run() {
     });
 
     //get a place
-    app.post("/getplace", verifyToken, async (req, res) => {
-      const filter = req.body;
-      const result = await places.findOne({ name: filter.toPlace });
-      res.send({ ...result });
+    app.get("/getplace/:placeName", verifyToken, async (req, res) => {
+      const filter = { name: req.params.placeName };
+      const result = await places.findOne(filter);
+      res.send(result);
     });
 
     //validate user
@@ -127,32 +141,9 @@ async function run() {
 
     //get hotels
     app.get("/hotels/:placeName", verifyToken, async (req, res) => {
-      const UserEmail = req.headers.authorization.split(" ")[2];
-      const placename = req.params.placeName;
-      if (req.decoded.email == UserEmail) {
-        const user = await users.findOne({ email: UserEmail });
-        if (user.bookings) {
-          const match = user.bookings.filter(
-            (book) => book.toPlace == placename
-          );
-          if (match.length < 0) {
-            return res.send({ success: false, message: "hav not any bookings" });
-          } else {
-            const hotelse = await places.findOne({ name: placename });
-            res.send({
-              success: true,
-              message: "you are right place",
-              hotelse,
-            });
-          }
-        } else {
-          return res.send({ success: true, message: "hav not any bookings" });
-        }
-      } else {
-        return res
-          .status(403)
-          .send({ message: "Forbidden access", success: false, code: 403 });
-      }
+      const { placeName } = req.params;
+      const hotels = await places.find({name: placeName}).project({hotels: 1, _id: 0}).toArray();
+      res.send({success: true, hotels: hotels[0].hotels});
     });
 
     //book hotel
@@ -170,12 +161,16 @@ async function run() {
         }
         const user = await users.findOne({ email: req.decoded.email });
         if (user.bookings) {
+          const booked = user.bookings.filter(
+            (booking) => booking.toPlace === placeName
+          );
+
+          console.log(booked);
+
           user.bookings.forEach(async (booking) => {
-            
             //error found
-            
+
             if (booking.toPlace == placeName) {
-              console.log(booking);
               const hotel = await places
                 .find({ name: placeName })
                 .project({ hotels: 1, _id: 0 })
@@ -183,9 +178,15 @@ async function run() {
 
               hotel[0].hotels.forEach(async (element) => {
                 if (element.name == hotelName) {
-                  const TotalDayCost = parseFloat(element.cost.split("$")[1]) * parseInt(req.body.days);
-                  const doc = { ...req.body, hotelName, Hotelcost: TotalDayCost };
-                  
+                  const TotalDayCost =
+                    parseFloat(element.cost.split("$")[1]) *
+                    parseInt(req.body.days);
+                  const doc = {
+                    ...req.body,
+                    hotelName,
+                    Hotelcost: TotalDayCost,
+                  };
+
                   booking["hotel"] = doc;
                   const update = { $set: { bookings: user.bookings } };
                   const options = { upsert: true };
@@ -262,31 +263,27 @@ async function run() {
 
     //insert a bookings
     app.post("/makebooking", verifyToken, async (req, res) => {
-      const doc = req.body;
-      const filter = { email: req.decoded.email };
-      const user = await users.findOne(filter);
-      if (user.bookings) {
-        user.bookings.push(doc);
-      } else {
-        user["bookings"] = [doc];
-      }
-      const update = { $set: { bookings: user.bookings } };
-      const options = { upsert: true };
-      const result = await users.updateOne(filter, update, options);
+      const doc = { ...req.body, email: req.decoded.email };
+      const result = await bookings.insertOne(doc);
+
+      // const filter = { email: req.decoded.email };
+      // const user = await users.findOne(filter);
+      // if (user.bookings) {
+      //   user.bookings.push(doc);
+      // } else {
+      //   user["bookings"] = [doc];
+      // }
+      // const update = { $set: { bookings: user.bookings } };
+      // const options = { upsert: true };
+      // const result = await users.updateOne(filter, update, options);
       res.send({ result });
     });
 
     //get users bookings
     app.get("/userbookings", verifyToken, async (req, res) => {
       const filter = { email: req.decoded.email };
-      const result = await users.findOne(filter);
-      res.send(
-        result.bookings || {
-          message: "Forbidden access, you have no bookings",
-          success: false,
-          code: 403,
-        }
-      );
+      const booking = await bookings.find(filter).toArray();
+      res.send(booking);
     });
   } finally {
     //client.close();
