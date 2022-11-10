@@ -74,32 +74,26 @@ async function run() {
     });
 
     //update users data after pay
-    app.put(
-      "/updateforpay/:email/:placeName",
-      verifyToken,
-      async (req, res) => {
-        const { placename, email } = req.params;
-        if (req.decoded.email === email) {
-          const user = await users.findOne({ email });
-          if (user.bookings) {
-            const match = user.bookings.filter(
-              (book) => book.toPlace === placename
-            );
-            if (match.length < 0) {
-              res.send({ success: false, message: "hav not that booking" });
-            } else {
-              console.log(req.body, match);
-            }
-          } else {
-            res.send({ success: false, message: "hav not any bookings" });
-          }
-        } else {
-          return res
-            .status(401)
-            .send({ message: "Unauthorize access", success: false, code: 401 });
+    app.put("/updateforpay/:bookingId", verifyToken, async (req, res) => {
+      const email = req.headers.authorization.split(" ")[2];
+      const { bookingId } = req.params;
+      if (req.decoded.email === email) {
+        const booking = await bookings.findOne({ _id: ObjectId(bookingId) });
+        if(booking){
+          const  newHotel = {...booking.hotel, payDetail: req.body}
+          const update = { $set: { payStatus: true, hotel: newHotel } };
+          const options = { upsert: true };
+          const book = await bookings.updateOne({ _id: ObjectId(bookingId) }, update, options);
+          res.send(book);
+        }else {
+          return res.send({ success: false, message: "hav not that booking" }); 
         }
+      } else {
+        return res
+          .status(401)
+          .send({ message: "Unauthorize access", success: false, code: 401 });
       }
-    );
+    });
 
     //post a user
     app.put("/insertUser", async (req, res) => {
@@ -149,6 +143,16 @@ async function run() {
       res.send({ success: true, hotels: hotels[0].hotels });
     });
 
+    //get cost
+    app.get("/getcost/:bookingId", verifyToken, async (req, res) => {
+      const { bookingId } = req.params;
+      const booking = await bookings
+        .find({ _id: ObjectId(bookingId) })
+        .project({ hotel: { totalCost: 1 }, _id: 0 })
+        .toArray();
+      res.send(booking[0].hotel);
+    });
+
     //book hotel
     app.post(
       "/bookhotel/:bookingId/:hotelName/:placeName",
@@ -176,7 +180,7 @@ async function run() {
           const totalCost =
             parseFloat(hotel.cost.split("$")[1]) * parseInt(req.body.days);
           const update = {
-            $set: { hotel: { ...req.body, totalCost, hotelName } },
+            $set: { hotel: { ...req.body, totalCost, hotelName }, payStatus: false },
           };
           const options = { upsert: true };
           const result = await bookings.updateOne(filter, update, options);
