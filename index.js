@@ -95,6 +95,19 @@ async function run() {
       }
     });
 
+    //cancelTour
+    app.delete('/cancelTour/:id', verifyToken, async(req, res)=>{
+      const email = req.headers.authorization.split(" ")[2];
+      const booking = await bookings.findOne({_id: ObjectId(req.params.id)});
+      if(email !== req.decoded.email || !booking){
+        return res
+          .status(401)
+          .send({ message: "Unauthorize access", success: false, code: 401 });
+      }
+      const result = await bookings.deleteOne({_id: ObjectId(req.params.id)});
+      res.send(result);
+    })
+    
     //post a user
     app.put("/insertUser", async (req, res) => {
       const query = { email: req.body.email };
