@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const jwt = require("jsonwebtoken");
 const stripe = require("stripe")(process.env.STRIPE_KEY);
 
@@ -142,72 +142,45 @@ async function run() {
     //get hotels
     app.get("/hotels/:placeName", verifyToken, async (req, res) => {
       const { placeName } = req.params;
-      const hotels = await places.find({name: placeName}).project({hotels: 1, _id: 0}).toArray();
-      res.send({success: true, hotels: hotels[0].hotels});
+      const hotels = await places
+        .find({ name: placeName })
+        .project({ hotels: 1, _id: 0 })
+        .toArray();
+      res.send({ success: true, hotels: hotels[0].hotels });
     });
 
     //book hotel
     app.post(
-      "/bookhotel/:placeName/:hotelName/:userEmail",
+      "/bookhotel/:bookingId/:hotelName/:placeName",
       verifyToken,
       async (req, res) => {
-        const { placeName, hotelName, userEmail } = req.params;
-        if (userEmail !== req.decoded.email) {
+        const email = req.headers.authorization.split(" ")[2];
+        const { bookingId, hotelName, placeName } = req.params;
+        if (email !== req.decoded.email) {
           return res.status(401).send({
             message: "Unauthorize access, invalid user",
             success: false,
             code: 401,
           });
         }
-        const user = await users.findOne({ email: req.decoded.email });
-        if (user.bookings) {
-          const booked = user.bookings.filter(
-            (booking) => booking.toPlace === placeName
+        const filter = { _id: ObjectId(bookingId) };
+        const booking = await bookings.findOne({ ...filter, email });
+        if (booking) {
+          const place = await places
+            .find({ name: placeName })
+            .project({ hotels: 1, _id: 0 })
+            .toArray();
+          const hotel = place[0].hotels.find(
+            (hotel) => hotel.name === hotelName
           );
-
-          console.log(booked);
-
-          user.bookings.forEach(async (booking) => {
-            //error found
-
-            if (booking.toPlace == placeName) {
-              const hotel = await places
-                .find({ name: placeName })
-                .project({ hotels: 1, _id: 0 })
-                .toArray();
-
-              hotel[0].hotels.forEach(async (element) => {
-                if (element.name == hotelName) {
-                  const TotalDayCost =
-                    parseFloat(element.cost.split("$")[1]) *
-                    parseInt(req.body.days);
-                  const doc = {
-                    ...req.body,
-                    hotelName,
-                    Hotelcost: TotalDayCost,
-                  };
-
-                  booking["hotel"] = doc;
-                  const update = { $set: { bookings: user.bookings } };
-                  const options = { upsert: true };
-                  // const result = await users.updateOne(
-                  //   { email: req.decoded.email },
-                  //   update,
-                  //   options
-                  // );
-                  // return res.send({ result });
-                }
-              });
-            }
-          });
-          // return res
-          //   .status(403)
-          //   .send({
-          //     message:
-          //       "Forbidden access, you  have no trip in this " + placeName,
-          //     success: false,
-          //     code: 403,
-          //   });
+          const totalCost =
+            parseFloat(hotel.cost.split("$")[1]) * parseInt(req.body.days);
+          const update = {
+            $set: { hotel: { ...req.body, totalCost, hotelName } },
+          };
+          const options = { upsert: true };
+          const result = await bookings.updateOne(filter, update, options);
+          res.send(result);
         } else {
           return res.status(403).send({
             message: "Forbidden access, you have no bookings",
@@ -219,47 +192,29 @@ async function run() {
     );
 
     //validate user for hotel booking
-    app.get(
-      "/usersforbookhotel/:placeName/:email",
-      verifyToken,
-      async (req, res) => {
-        const { placeName, email } = req.params;
-        if (email !== req.decoded.email) {
-          return res.status(401).send({
-            message: "Unauthorize access, invalid user",
-            success: false,
-            code: 401,
-          });
+    app.get("/usersforbookhotel/:placeName", verifyToken, async (req, res) => {
+      const { placeName } = req.params;
+      const email = req.headers.authorization.split(" ")[2];
+      if (email !== req.decoded.email) {
+        return res.status(401).send({
+          message: "Unauthorize access, invalid user",
+          success: false,
+          code: 401,
+        });
+      } else {
+        const booking = await bookings.find({ email }).toArray();
+        const exist = booking?.find((booking) => booking.toPlace === placeName);
+        if (exist) {
+          return res.send({ valid: true });
         } else {
-          const user = await users.findOne({ email: req.decoded.email });
-          if (user.bookings) {
-            let have;
-            user.bookings.forEach(async (booking) => {
-              if (booking.toPlace == placeName) {
-                have = true;
-              }
-            });
-            if (have) {
-              // const placeDetail = await
-
-              return res.send({ valid: true });
-            } else {
-              return res.status(403).send({
-                message: "Forbidden access, you have no bookings",
-                success: false,
-                code: 403,
-              });
-            }
-          } else {
-            return res.status(403).send({
-              message: "Forbidden access, you have no bookings",
-              success: false,
-              code: 403,
-            });
-          }
+          return res.status(403).send({
+            message: "Forbidden access, you have no bookings",
+            success: false,
+            code: 403,
+          });
         }
       }
-    );
+    });
 
     //insert a bookings
     app.post("/makebooking", verifyToken, async (req, res) => {
