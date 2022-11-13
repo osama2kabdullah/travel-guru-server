@@ -50,6 +50,21 @@ async function run() {
       const result = await places.find().toArray();
       res.send(result);
     });
+    
+    //filterbooking
+    app.get('/filterbooking/:filter', verifyToken, async (req, res)=>{
+      const {filter} = req.params;
+      const {email} = req.decoded;
+      let booking;
+      if(filter === 'previus_trips'){
+        booking = await bookings.find({email, toDate: {$lt : new Date()}}).toArray();
+      }else if (filter === 'future_trips'){
+        booking = await bookings.find({email, FromDate: {$gt : new Date()}}).toArray();
+      }else {
+        booking = await bookings.find({email, FromDate: {$lte : new Date()}, toDate: { $gte : new Date() }}).toArray();
+      }
+      res.send(booking);
+    })
 
     //validate admin
     app.get("/admin/:email", verifyToken, async (req, res) => {
@@ -235,28 +250,13 @@ async function run() {
 
     //insert a bookings
     app.post("/makebooking", verifyToken, async (req, res) => {
-      const doc = { ...req.body, email: req.decoded.email };
+      const {fromPlace, toPlace, FromDate, toDate} = req.body;
+      const doc = { fromPlace, toPlace, FromDate: new Date(FromDate), toDate: new Date(toDate) , email: req.decoded.email };
       const result = await bookings.insertOne(doc);
-
-      // const filter = { email: req.decoded.email };
-      // const user = await users.findOne(filter);
-      // if (user.bookings) {
-      //   user.bookings.push(doc);
-      // } else {
-      //   user["bookings"] = [doc];
-      // }
-      // const update = { $set: { bookings: user.bookings } };
-      // const options = { upsert: true };
-      // const result = await users.updateOne(filter, update, options);
       res.send({ result });
     });
-
-    //get users bookings
-    app.get("/userbookings", verifyToken, async (req, res) => {
-      const filter = { email: req.decoded.email };
-      const booking = await bookings.find(filter).toArray();
-      res.send(booking);
-    });
+    
+    
   } finally {
     //client.close();
   }
