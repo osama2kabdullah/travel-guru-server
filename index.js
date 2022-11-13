@@ -119,7 +119,7 @@ async function run() {
           .status(401)
           .send({ message: "Unauthorize access", success: false, code: 401 });
       }
-      const result = await bookings.deleteOne({_id: ObjectId(req.params.id)});
+      const result = await bookings.deleteOne({_id: ObjectId(req.params.id), toDate: {$gte: new Date() }});
       res.send(result);
     })
     
