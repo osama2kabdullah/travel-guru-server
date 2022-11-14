@@ -45,6 +45,20 @@ async function run() {
     const users = client.db("travel-guru").collection("users");
     const bookings = client.db("travel-guru").collection("bookings");
 
+    //ADMIN
+    //users
+    app.get('/allusers', verifyToken, async (req, res)=>{
+      const email = req.headers.authorization.split(' ')[2];
+      const user = await users.find({ email }).project({role: 1, _id: 0}).toArray();
+      if(user[0].role === 'admin' && email === req.decoded.email){
+        const allUser = await users.find({}).toArray();
+        // const rmD = await users.updateMany({}, {$unset : {bookings: 1}});
+        return res.send(allUser);
+      }
+      res.status(401).send({ message: "Unauthorize access", success: false, code: 401 });
+    })
+    
+    
     //get placces
     app.get("/palces", async (req, res) => {
       const result = await places.find().toArray();
@@ -67,13 +81,13 @@ async function run() {
     })
 
     //validate admin
-    app.get("/admin/:email", verifyToken, async (req, res) => {
-      const email = req.params.email;
+    app.get("/admin", verifyToken, async (req, res) => {
+      const email = req.headers.authorization.split(' ')[2];
       if (req.decoded.email === email) {
-        const user = await users.findOne({ email });
-
-        res.send(user?.roll === "admin" ? { admin: true } : { admin: false });
+        const user = await users.findOne({ email, role: 'admin' });
+        return res.send(user ? {admin: true} : {admin: false});
       }
+      res.status(401).send({ message: "Unauthorize access", success: false, code: 401 });
     });
 
     //payment intent
