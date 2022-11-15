@@ -46,16 +46,48 @@ async function run() {
     const bookings = client.db("travel-guru").collection("bookings");
 
     //ADMIN
+    //varify admin
+    const verifyAdmin = async (req, res, next)=>{
+    const email = req.headers.authorization.split(' ')[2];
+    const user = await users.find({ email }).project({role: 1, _id: 0}).toArray();
+    if(user[0].role === 'admin' && email === req.decoded.email){
+      next();
+    }
+    else {
+      res.status(401).send({ message: "Unauthorize access", success: false, code: 401 });
+    }}
+    
+    //make admin
+    app.patch('/makeadmin/:id', verifyToken, verifyAdmin, async (req, res)=>{
+      const result = await users.updateOne({_id: ObjectId(req.params.id)}, {$set : {role: 'admin'}}, {upsert: true})
+      res.send(result)
+  })
+  
+  //block someone
+  app.patch('/block/:id', verifyToken, verifyAdmin, async (req, res)=>{
+    const result = await users.updateOne({_id: ObjectId(req.params.id)}, {$set : {role: 'block'}}, {upsert: true})
+    res.send(result)
+  })
+  
+  //unblock someone
+  app.patch('/unblock/:id', verifyToken, verifyAdmin, async (req, res)=>{
+    const result = await users.updateOne({_id: ObjectId(req.params.id)}, {$set : {role: 'user'}}, {upsert: true})
+    res.send(result)
+  })
+    
+    //user bookings count
+    app.get('/userbookingscount/:email', verifyToken, verifyAdmin, async (req, res)=>{
+      // const count = await bookings.find({email: req.params.email}).count();
+      const count = await bookings.count({email: req.params.email});
+      // console.log(booking);
+      res.send({count});
+    })
+    
     //users
-    app.get('/allusers', verifyToken, async (req, res)=>{
-      const email = req.headers.authorization.split(' ')[2];
-      const user = await users.find({ email }).project({role: 1, _id: 0}).toArray();
-      if(user[0].role === 'admin' && email === req.decoded.email){
+    app.get('/allusers', verifyToken, verifyAdmin, async (req, res)=>{
         const allUser = await users.find({}).toArray();
         // const rmD = await users.updateMany({}, {$unset : {bookings: 1}});
         return res.send(allUser);
-      }
-      res.status(401).send({ message: "Unauthorize access", success: false, code: 401 });
     })
     
     
