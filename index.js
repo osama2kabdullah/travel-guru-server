@@ -83,11 +83,27 @@ async function run() {
       res.send({count});
     })
     
-    //users
+    //get all users
     app.get('/allusers', verifyToken, verifyAdmin, async (req, res)=>{
         const allUser = await users.find({}).toArray();
         // const rmD = await users.updateMany({}, {$unset : {bookings: 1}});
-        return res.send(allUser);
+        res.send(allUser);
+    })
+    
+    //get all bookings
+    app.get('/allbookings/:filter', verifyToken, verifyAdmin, async (req, res)=>{
+      const allbookings = await bookings.find().toArray();
+      
+      let Allbooking;
+      const current = new Date(); 
+      if('Generel' === req.params.filter){
+        let followingDay = new Date(current.getTime() - 86400000); // + 1 day in added
+        Allbooking = await bookings.find({toDate: {$gt : followingDay}}).toArray();
+      }else if('Old' === req.params.filter){
+        let followingDay = new Date(current.getTime() - 86400000); // + 1 day in added
+        Allbooking = await bookings.find({toDate: {$lt : followingDay}}).toArray();
+      }
+      res.send(Allbooking)
     })
     
     
