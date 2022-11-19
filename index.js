@@ -112,6 +112,12 @@ async function run() {
     res.send(hotels)
   })
   
+  //get all places
+  app.get('/allplaces', verifyToken, verifyAdmin, async (req, res)=> {
+    const allPlace = await places.find().project({name: 1}).toArray();
+    res.send(allPlace);
+  })
+  
   //block someone
   app.patch('/block/:id', verifyToken, verifyAdmin, async (req, res)=>{
     const result = await users.updateOne({_id: ObjectId(req.params.id)}, {$set : {role: 'block'}}, {upsert: true})
