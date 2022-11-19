@@ -57,10 +57,59 @@ async function run() {
       res.status(401).send({ message: "Unauthorize access", success: false, code: 401 });
     }}
     
+    //insert hotels
+    app.put('/actionhotel/:placename/:method/:hotelName', verifyToken, verifyAdmin, async (req, res)=>{
+      const {method, placename, hotelName} = req.params;
+      const hotelArray = await places.find({name: placename}).project({hotels: 1, _id:0}).toArray();
+      const Allhotel = hotelArray?.[0]?.hotels;
+      
+      if(method === 'Add this'){
+        const query = { name: placename };
+        const updateDocument = {
+          $push: { "hotels": req.body }
+        };
+        const result = await places.updateOne(query, updateDocument);
+        res.send(result);
+        
+      }else if(method === 'Update this'){
+        const perticularHotel = Allhotel.find(hotel=>hotel.name===hotelName);
+        console.log(req.body);
+        // const query = {name: placename, "hotels.name": hotelName};
+        // const update = {$set: {"hotels.$[f]": req.body}};
+        // const options = {arrayFilters: [{"f.name": hotelName}]};
+        // const result = await places.updateOne(query, update, options);
+        
+        // console.log(result);
+        
+      }else if(method === 'Remove this'){
+        const query = { name: placename };
+        const updateDocument = {
+          $pull: { "hotels": {name: hotelName} }
+        };
+        const result = await places.updateOne(query, updateDocument);
+        res.send(result);
+        
+      }
+      
+      //To delete
+      // -----------------
+      // collection.update(
+      //   { _id: id },
+      //   { $pull: { 'contact.phone': { number: '+1786543589455' } } }
+      // );
+      
+    })
+    
     //make admin
     app.patch('/makeadmin/:id', verifyToken, verifyAdmin, async (req, res)=>{
       const result = await users.updateOne({_id: ObjectId(req.params.id)}, {$set : {role: 'admin'}}, {upsert: true})
       res.send(result)
+  })
+  
+  //get all hotels
+  app.get('/allhotels', verifyToken, verifyAdmin, async (req, res)=>{
+    const hotels = await places.find().project({hotels: 1, name: 1}).toArray();
+    res.send(hotels)
   })
   
   //block someone
@@ -113,6 +162,7 @@ async function run() {
       res.send(result);
     });
     
+    //FOR USER
     //filterbooking
     app.get('/filterbooking/:filter', verifyToken, async (req, res)=>{
       const {filter} = req.params;
@@ -325,7 +375,7 @@ async function run() {
 }
 run().catch(console.dir);
 
-app.get("", (req, res) => {
+app.get("", async (req, res) => {
   res.send("travel guru running");
 });
 
