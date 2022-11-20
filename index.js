@@ -6,7 +6,7 @@ const jwt = require("jsonwebtoken");
 const stripe = require("stripe")(process.env.STRIPE_KEY);
 
 const app = express();
-const port = process.env.PORT || 5000; 
+const port = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
@@ -47,151 +47,227 @@ async function run() {
 
     //ADMIN
     //varify admin
-    const verifyAdmin = async (req, res, next)=>{
-    const email = req.headers.authorization.split(' ')[2];
-    const user = await users.find({ email }).project({role: 1, _id: 0}).toArray();
-    if(user[0].role === 'admin' && email === req.decoded.email){
-      next();
-    }
-    else {
-      res.status(401).send({ message: "Unauthorize access", success: false, code: 401 });
-    }}
-    
-    //insert hotels
-    app.put('/actionhotel/:placename/:method/:hotelName', verifyToken, verifyAdmin, async (req, res)=>{
-      const {method, placename, hotelName} = req.params;
-      const hotelArray = await places.find({name: placename}).project({hotels: 1, _id:0}).toArray();
-      const Allhotel = hotelArray?.[0]?.hotels;
-      
-      if(method === 'Add this'){
-        const query = { name: placename };
-        const updateDocument = {
-          $push: { "hotels": req.body }
-        };
-        const result = await places.updateOne(query, updateDocument);
-        res.send(result);
-        
-      }else if(method === 'Update this'){
-        const perticularHotel = Allhotel.find(hotel=>hotel.name===hotelName);
-        console.log(req.body);
-        // const query = {name: placename, "hotels.name": hotelName};
-        // const update = {$set: {"hotels.$[f]": req.body}};
-        // const options = {arrayFilters: [{"f.name": hotelName}]};
-        // const result = await places.updateOne(query, update, options);
-        
-        // console.log(result);
-        
-      }else if(method === 'Remove this'){
-        const query = { name: placename };
-        const updateDocument = {
-          $pull: { "hotels": {name: hotelName} }
-        };
-        const result = await places.updateOne(query, updateDocument);
-        res.send(result);
-        
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.headers.authorization.split(" ")[2];
+      const user = await users
+        .find({ email })
+        .project({ role: 1, _id: 0 })
+        .toArray();
+      if (user[0].role === "admin" && email === req.decoded.email) {
+        next();
+      } else {
+        res
+          .status(401)
+          .send({ message: "Unauthorize access", success: false, code: 401 });
       }
-      
-      //To delete
-      // -----------------
-      // collection.update(
-      //   { _id: id },
-      //   { $pull: { 'contact.phone': { number: '+1786543589455' } } }
-      // );
-      
-    })
-    
+    };
+
+    //RUD places
+    app.put(
+      "/actionplace/:placename/:method",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const { method, placename } = req.params;
+        let result = {};
+        if(method === 'remove'){
+          result = await places.deleteOne({name: placename});
+        }else if(method === 'update'){
+          result = await places.updateOne({name: placename}, {$set: req.body}, {upsert: true});
+        }else if(method === 'add'){
+          result = await places.insertOne({...req.body, hotels: []});
+        }
+        res.send(result)
+      }
+    );
+
+    //RUD hotels
+    app.put(
+      "/actionhotel/:placename/:method/:hotelName",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const { method, placename, hotelName } = req.params;
+        const hotelArray = await places
+          .find({ name: placename })
+          .project({ hotels: 1, _id: 0 })
+          .toArray();
+        const Allhotel = hotelArray?.[0]?.hotels;
+
+        if (method === "Add this") {
+          const query = { name: placename };
+          const updateDocument = {
+            $push: { hotels: req.body },
+          };
+          const result = await places.updateOne(query, updateDocument);
+          res.send(result);
+        } else if (method === "Update this") {
+          const perticularHotel = Allhotel.find(
+            (hotel) => hotel.name === hotelName
+          );
+          console.log(req.body);
+          // const query = {name: placename, "hotels.name": hotelName};
+          // const update = {$set: {"hotels.$[f]": req.body}};
+          // const options = {arrayFilters: [{"f.name": hotelName}]};
+          // const result = await places.updateOne(query, update, options);
+
+          // console.log(result);
+        } else if (method === "Remove this") {
+          const query = { name: placename };
+          const updateDocument = {
+            $pull: { hotels: { name: hotelName } },
+          };
+          const result = await places.updateOne(query, updateDocument);
+          res.send(result);
+        }
+
+        //To delete
+        // -----------------
+        // collection.update(
+        //   { _id: id },
+        //   { $pull: { 'contact.phone': { number: '+1786543589455' } } }
+        // );
+      }
+    );
+
     //make admin
-    app.patch('/makeadmin/:id', verifyToken, verifyAdmin, async (req, res)=>{
-      const result = await users.updateOne({_id: ObjectId(req.params.id)}, {$set : {role: 'admin'}}, {upsert: true})
-      res.send(result)
-  })
-  
-  //get all hotels
-  app.get('/allhotels', verifyToken, verifyAdmin, async (req, res)=>{
-    const hotels = await places.find().project({hotels: 1, name: 1}).toArray();
-    res.send(hotels)
-  })
-  
-  //get all places
-  app.get('/allplaces', verifyToken, verifyAdmin, async (req, res)=> {
-    const allPlace = await places.find().project({name: 1}).toArray();
-    res.send(allPlace);
-  })
-  
-  //block someone
-  app.patch('/block/:id', verifyToken, verifyAdmin, async (req, res)=>{
-    const result = await users.updateOne({_id: ObjectId(req.params.id)}, {$set : {role: 'block'}}, {upsert: true})
-    res.send(result)
-  })
-  
-  //unblock someone
-  app.patch('/unblock/:id', verifyToken, verifyAdmin, async (req, res)=>{
-    const result = await users.updateOne({_id: ObjectId(req.params.id)}, {$set : {role: 'user'}}, {upsert: true})
-    res.send(result)
-  })
-    
+    app.patch("/makeadmin/:id", verifyToken, verifyAdmin, async (req, res) => {
+      const result = await users.updateOne(
+        { _id: ObjectId(req.params.id) },
+        { $set: { role: "admin" } },
+        { upsert: true }
+      );
+      res.send(result);
+    });
+
+    //get all hotels
+    app.get("/allhotels", verifyToken, verifyAdmin, async (req, res) => {
+      const hotels = await places
+        .find()
+        .project({ hotels: 1, name: 1 })
+        .toArray();
+      res.send(hotels);
+    });
+
+    //get all places
+    app.get("/allplaces", verifyToken, verifyAdmin, async (req, res) => {
+      const allPlace = await places.find().project({ name: 1 }).toArray();
+      res.send(allPlace);
+    });
+
+    //block someone
+    app.patch("/block/:id", verifyToken, verifyAdmin, async (req, res) => {
+      const result = await users.updateOne(
+        { _id: ObjectId(req.params.id) },
+        { $set: { role: "block" } },
+        { upsert: true }
+      );
+      res.send(result);
+    });
+
+    //unblock someone
+    app.patch("/unblock/:id", verifyToken, verifyAdmin, async (req, res) => {
+      const result = await users.updateOne(
+        { _id: ObjectId(req.params.id) },
+        { $set: { role: "user" } },
+        { upsert: true }
+      );
+      res.send(result);
+    });
+
     //user bookings count
-    app.get('/userbookingscount/:email', verifyToken, verifyAdmin, async (req, res)=>{
-      // const count = await bookings.find({email: req.params.email}).count();
-      const count = await bookings.count({email: req.params.email});
-      // console.log(booking);
-      res.send({count});
-    })
-    
-    //get all users
-    app.get('/allusers', verifyToken, verifyAdmin, async (req, res)=>{
-        const allUser = await users.find({}).toArray();
-        // const rmD = await users.updateMany({}, {$unset : {bookings: 1}});
-        res.send(allUser);
-    })
-    
-    //get all bookings
-    app.get('/allbookings/:filter', verifyToken, verifyAdmin, async (req, res)=>{
-      const allbookings = await bookings.find().toArray();
-      
-      let Allbooking;
-      const current = new Date(); 
-      if('Generel' === req.params.filter){
-        let followingDay = new Date(current.getTime() - 86400000); // + 1 day in added
-        Allbooking = await bookings.find({toDate: {$gt : followingDay}}).toArray();
-      }else if('Old' === req.params.filter){
-        let followingDay = new Date(current.getTime() - 86400000); // + 1 day in added
-        Allbooking = await bookings.find({toDate: {$lt : followingDay}}).toArray();
+    app.get(
+      "/userbookingscount/:email",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        // const count = await bookings.find({email: req.params.email}).count();
+        const count = await bookings.count({ email: req.params.email });
+        // console.log(booking);
+        res.send({ count });
       }
-      res.send(Allbooking)
-    })
-    
-    
+    );
+
+    //get all users
+    app.get("/allusers", verifyToken, verifyAdmin, async (req, res) => {
+      const allUser = await users.find({}).toArray();
+      // const rmD = await users.updateMany({}, {$unset : {bookings: 1}});
+      res.send(allUser);
+    });
+
+    //get all bookings
+    app.get(
+      "/allbookings/:filter",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const allbookings = await bookings.find().toArray();
+
+        let Allbooking;
+        const current = new Date();
+        if ("Generel" === req.params.filter) {
+          let followingDay = new Date(current.getTime() - 86400000); // + 1 day in added
+          Allbooking = await bookings
+            .find({ toDate: { $gt: followingDay } })
+            .toArray();
+        } else if ("Old" === req.params.filter) {
+          let followingDay = new Date(current.getTime() - 86400000); // + 1 day in added
+          Allbooking = await bookings
+            .find({ toDate: { $lt: followingDay } })
+            .toArray();
+        }
+        res.send(Allbooking);
+      }
+    );
+
     //get placces
     app.get("/palces", async (req, res) => {
       const result = await places.find().toArray();
       res.send(result);
     });
-    
+
     //FOR USER
+    //load all places
+    app.get('/comonplaces', async (req, res)=>{
+      const AllPlace = await places.find().project({name: 1, picture: 1, about: 1}).toArray();
+      res.send(AllPlace)
+    })
+    
     //filterbooking
-    app.get('/filterbooking/:filter', verifyToken, async (req, res)=>{
-      const {filter} = req.params;
-      const {email} = req.decoded;
+    app.get("/filterbooking/:filter", verifyToken, async (req, res) => {
+      const { filter } = req.params;
+      const { email } = req.decoded;
       let booking;
-      if(filter === 'previus_trips'){
-        booking = await bookings.find({email, toDate: {$lt : new Date()}}).toArray();
-      }else if (filter === 'future_trips'){
-        booking = await bookings.find({email, FromDate: {$gt : new Date()}}).toArray();
-      }else {
-        booking = await bookings.find({email, FromDate: {$lte : new Date()}, toDate: { $gte : new Date() }}).toArray();
+      if (filter === "previus_trips") {
+        booking = await bookings
+          .find({ email, toDate: { $lt: new Date() } })
+          .toArray();
+      } else if (filter === "future_trips") {
+        booking = await bookings
+          .find({ email, FromDate: { $gt: new Date() } })
+          .toArray();
+      } else {
+        booking = await bookings
+          .find({
+            email,
+            FromDate: { $lte: new Date() },
+            toDate: { $gte: new Date() },
+          })
+          .toArray();
       }
       res.send(booking);
-    })
+    });
 
     //validate admin
     app.get("/admin", verifyToken, async (req, res) => {
-      const email = req.headers.authorization.split(' ')[2];
+      const email = req.headers.authorization.split(" ")[2];
       if (req.decoded.email === email) {
-        const user = await users.findOne({ email, role: 'admin' });
-        return res.send(user ? {admin: true} : {admin: false});
+        const user = await users.findOne({ email, role: "admin" });
+        return res.send(user ? { admin: true } : { admin: false });
       }
-      res.status(401).send({ message: "Unauthorize access", success: false, code: 401 });
+      res
+        .status(401)
+        .send({ message: "Unauthorize access", success: false, code: 401 });
     });
 
     //payment intent
@@ -212,14 +288,18 @@ async function run() {
       const { bookingId } = req.params;
       if (req.decoded.email === email) {
         const booking = await bookings.findOne({ _id: ObjectId(bookingId) });
-        if(booking){
-          const  newHotel = {...booking.hotel, payDetail: req.body}
+        if (booking) {
+          const newHotel = { ...booking.hotel, payDetail: req.body };
           const update = { $set: { payStatus: true, hotel: newHotel } };
           const options = { upsert: true };
-          const book = await bookings.updateOne({ _id: ObjectId(bookingId) }, update, options);
+          const book = await bookings.updateOne(
+            { _id: ObjectId(bookingId) },
+            update,
+            options
+          );
           res.send(book);
-        }else {
-          return res.send({ success: false, message: "hav not that booking" }); 
+        } else {
+          return res.send({ success: false, message: "hav not that booking" });
         }
       } else {
         return res
@@ -229,18 +309,21 @@ async function run() {
     });
 
     //cancelTour
-    app.delete('/cancelTour/:id', verifyToken, async(req, res)=>{
+    app.delete("/cancelTour/:id", verifyToken, async (req, res) => {
       const email = req.headers.authorization.split(" ")[2];
-      const booking = await bookings.findOne({_id: ObjectId(req.params.id)});
-      if(email !== req.decoded.email || !booking){
+      const booking = await bookings.findOne({ _id: ObjectId(req.params.id) });
+      if (email !== req.decoded.email || !booking) {
         return res
           .status(401)
           .send({ message: "Unauthorize access", success: false, code: 401 });
       }
-      const result = await bookings.deleteOne({_id: ObjectId(req.params.id), toDate: {$gte: new Date() }});
+      const result = await bookings.deleteOne({
+        _id: ObjectId(req.params.id),
+        toDate: { $gte: new Date() },
+      });
       res.send(result);
-    })
-    
+    });
+
     //post a user
     app.put("/insertUser", async (req, res) => {
       const query = { email: req.body.email };
@@ -326,7 +409,10 @@ async function run() {
           const totalCost =
             parseFloat(hotel.cost.split("$")[1]) * parseInt(req.body.days);
           const update = {
-            $set: { hotel: { ...req.body, totalCost, hotelName }, payStatus: false },
+            $set: {
+              hotel: { ...req.body, totalCost, hotelName },
+              payStatus: false,
+            },
           };
           const options = { upsert: true };
           const result = await bookings.updateOne(filter, update, options);
@@ -368,13 +454,17 @@ async function run() {
 
     //insert a bookings
     app.post("/makebooking", verifyToken, async (req, res) => {
-      const {fromPlace, toPlace, FromDate, toDate} = req.body;
-      const doc = { fromPlace, toPlace, FromDate: new Date(FromDate), toDate: new Date(toDate) , email: req.decoded.email };
+      const { fromPlace, toPlace, FromDate, toDate } = req.body;
+      const doc = {
+        fromPlace,
+        toPlace,
+        FromDate: new Date(FromDate),
+        toDate: new Date(toDate),
+        email: req.decoded.email,
+      };
       const result = await bookings.insertOne(doc);
       res.send({ result });
     });
-    
-    
   } finally {
     //client.close();
   }
